@@ -1,0 +1,50 @@
+# Install composer dependencies and all needed packages and run all tests
+name: Main
+on:
+  push:
+    branches: [develop, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # Continue tests in case if any of them fails
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8
+          extensions: mbstring, intl
+          ini-values: post_max_size=256M, short_open_tag=On, memory_limit=1024M
+          # No coverage speedup tests 3x times
+          coverage: none
+        env:
+          COMPOSER_TOKEN: ${{ secrets.COMPOSER_TOKEN }}
+
+      - name: Get Composer Cache Directory
+        id: composer-cache
+        run: |
+          echo "::set-output name=dir::$(composer config cache-files-dir)"
+      - name: Caching composer dependencies
+        uses: actions/cache@v2
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+      - name: Install Dependencies
+        run: composer install --no-interaction --no-scripts --no-progress --prefer-dist
+
+      - name: Run tests
+        run: vendor/bin/phpunit --log-junit phpunit-report.xml
+
+      # Store junit report to artifacts. It can be analyzed here: https://marmelab.com/phpunit-d3-report/
+      - name: Report JUnit
+        uses: actions/upload-artifact@v2
+        with:
+          name: JUnit phpunit Report
+          path: phpunit-report.xml
